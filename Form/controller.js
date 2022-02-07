@@ -63,9 +63,9 @@ const updatePost = async(req,res,next) =>{
         let result = await fetchResults(sqlQuery,sqlValue)
 
         let userId = result[0].userId
-        let { postId } = req.query
-        let columnName = Object.keys(req.body)[0]
-        let columnValue = Object.values(req.body)[0]
+        let postId = req.query.postId
+        let columnName = Object.keys(req.query)[1]
+        let columnValue = Object.values(req.query)[1]
         sqlQuery = `UPDATE post set ${columnName} = (?) where postId = (?) and userId = (?)`
         sqlValue = [columnValue,postId,userId]
         result = await fetchResults(sqlQuery,sqlValue)
@@ -117,6 +117,60 @@ const deletePost = async(req,res,next) =>{
 }
 
 
+const answerPost = async(req,res,next) =>{
+    try{
+        let email = req.userEmail
+        let sqlQuery = `SELECT userId from user where email = (?)`
+        let sqlValue = [email]
+        let result = await fetchResults(sqlQuery,sqlValue)
+
+        let userId = result[0].userId
+        let { postId, answer } = req.body
+        sqlQuery = `INSERT into answer (userId, postId, answer) values ?`
+        sqlValue = [[[userId,postId,answer]]]
+        result = await fetchResults(sqlQuery,sqlValue)
+
+        let response = createResponse(result.affectedRows,`${result.affectedRows} row/s inserted`)
+        res.status(200).send(response)
+
+    }catch(err){
+        let errorInstance = createErrorResponse(500,"Internal Server Error",err)
+        next(errorInstance)
+    }
+}
+
+
+const displayAnswer = async(req,res,next) =>{
+    try{
+        let title = req.query.title
+        let sqlQuery = `SELECT postId from post where title = ?`
+        let sqlValue = [title]
+        let result = await fetchResults(sqlQuery,sqlValue)
+
+        let postId = result[0].postId
+        sqlQuery="SELECT "
+        let filters = Object.keys(req.query)
+        if(filters.length===1) sqlQuery += ("* from answer ")
+        else{
+            for(let i=1;i<filters.length;i++){
+                if(i!=filters.length-1) sqlQuery += (`${filters[i]}, `)
+                else sqlQuery += (`${filters[i]} `)
+            }
+            sqlQuery += ("from answer")
+        }
+        sqlQuery += (` where postId = (?) order by createdTime desc`)
+        sqlValue = [postId]
+        result = await fetchResults(sqlQuery,sqlValue)
+
+        let response = createResponse(result,'Read all Data')
+        res.status(200).send(response)
+
+    }catch(err){
+        let errorInstance = createErrorResponse(500,"Internal Server Error",err)
+        next(errorInstance)
+    }
+}
+
 
 
 
@@ -124,5 +178,7 @@ module.exports = {
     signIn,
     createPost,
     updatePost,
-    deletePost
+    deletePost,
+    answerPost,
+    displayAnswer
 }

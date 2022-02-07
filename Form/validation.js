@@ -45,15 +45,10 @@ const validateUpdatePost = async(req,res,next) =>{
         postId:Joi.number()
     })
 
-    let validationBody = Schema.validate(req.body,{ abortEarly: false })
-    let validationQuery = Schema.validate(req.query)
+    let validationQuery = Schema.validate(req.query,{ abortEarly: false })
 
-    if(validationBody.error || validationQuery.error){
-        let errorInstance
-        if(validationBody.error) errorInstance= createErrorResponse(400,"Bad Request",validationBody.error)
-        if(validationQuery.error){
-            errorInstance= createErrorResponse(400,"Bad Request",validationQuery.error)
-        }
+    if(validationQuery.error){
+        let errorInstance = createErrorResponse(400,"Bad Request",validationQuery.error)
         return next(errorInstance)
     }
 
@@ -80,6 +75,39 @@ const validateDeletePost = async(req,res,next) =>{
     }
 }
 
+const validateAnswerPost = async(req,res,next) =>{
+    const Schema = Joi.object({
+        postId:Joi.number().strict().required(),
+        answer: Joi.string().required()
+    })
+
+    let validationBody = Schema.validate(req.body)
+
+    if(validationBody.error){
+        let errorInstance=createErrorResponse(400,"Bad Request",validationBody.error)
+        return next(errorInstance)
+    }
+
+    else{
+        next()
+    }
+}
+
+
+const validateDisplayAnswer = async(req,res,next)=>{
+    const Schema = Joi.object({
+        title: Joi.string().min(1),
+    }).unknown(true)
+    let validationQuery = Schema.validate(req.query)
+    if(validationQuery.error){
+        let errorInstance=createErrorResponse(400,"Bad Request",validationQuery.error)
+        return next(errorInstance)
+    }
+    else{
+        next()
+    }
+}
+
 
 
 
@@ -88,5 +116,7 @@ module.exports = {
     validateSignIn,
     validateCreatePost,
     validateUpdatePost,
-    validateDeletePost
+    validateDeletePost,
+    validateAnswerPost,
+    validateDisplayAnswer
 }
