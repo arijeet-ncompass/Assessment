@@ -172,6 +172,7 @@ const displayAnswer = async(req,res,next) =>{
     }
 }
 
+
 const displayPost = async(req,res,next) =>{
     try{
         let page = req.query.page
