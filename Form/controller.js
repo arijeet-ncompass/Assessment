@@ -3,6 +3,7 @@ const { createErrorResponse } = require('../Utilities/errorHandler')
 const { createResponse } = require('../Utilities/responseHandler')
 const md5 = require('md5')
 const { jwtSign } = require('../Utilities/auth') 
+const { resourceLimits } = require('worker_threads')
 
 const signIn = async(req,res,next) =>{
     try{
@@ -171,6 +172,38 @@ const displayAnswer = async(req,res,next) =>{
     }
 }
 
+const displayPost = async(req,res,next) =>{
+    try{
+        let page = req.query.page
+        page = Number(page)
+        let recordsPerPage = 2
+        offsetValue = (page-1)*recordsPerPage
+
+        let sqlQuery = `SELECT postId,description,createdTime from post where `
+        for(let i=1;i<Object.keys(req.query).length;i++){
+            if(i!=Object.keys(req.query).length-1) sqlQuery += (`${ Object.keys(req.query)[i] } like ? and `)
+            else sqlQuery += (`${ Object.keys(req.query)[i] } like ? `)
+        }
+        sqlQuery +=("order by createdTime desc")
+        let sqlValue = []
+        for(let i=1;i<Object.values(req.query).length;i++){
+            let value = "%"
+            value += Object.values(req.query)[i]
+            value +="%"
+            sqlValue.push(value)
+        }
+        let results = await fetchResults(sqlQuery,sqlValue)
+
+        let response = createResponse(results,'Read all Data')
+        res.status(200).send(response)
+
+    }catch(err){
+        console.log(err)
+        let errorInstance = createErrorResponse(500,"Internal Server Error",err)
+        next(errorInstance)
+    }
+}
+
 
 
 
@@ -180,5 +213,6 @@ module.exports = {
     updatePost,
     deletePost,
     answerPost,
-    displayAnswer
+    displayAnswer,
+    displayPost
 }

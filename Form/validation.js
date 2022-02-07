@@ -109,6 +109,22 @@ const validateDisplayAnswer = async(req,res,next)=>{
 }
 
 
+const validateDisplayPost = async(req,res,next)=>{
+    const Schema = Joi.object({
+        page:Joi.number().required(),
+        title: Joi.string().min(1),
+        tag: Joi.string().min(1)
+    })
+    let validationQuery = Schema.validate(req.query)
+    if(validationQuery.error){
+        let errorInstance=createErrorResponse(400,"Bad Request",validationQuery.error)
+        return next(errorInstance)
+    }
+    else{
+        next()
+    }
+}
+
 
 
 
@@ -118,5 +134,6 @@ module.exports = {
     validateUpdatePost,
     validateDeletePost,
     validateAnswerPost,
-    validateDisplayAnswer
+    validateDisplayAnswer,
+    validateDisplayPost
 }
