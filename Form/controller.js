@@ -3,14 +3,13 @@ const { createErrorResponse } = require('../Utilities/errorHandler')
 const { createResponse } = require('../Utilities/responseHandler')
 const md5 = require('md5')
 const { jwtSign } = require('../Utilities/auth') 
-const { resourceLimits } = require('worker_threads')
 
 const signIn = async(req,res,next) =>{
     try{
         const { email , password } = req.body
         let passwordDigest = md5(password)
 
-        let sqlQuery = `SELECT EXISTS (SELECT email from user where email = (?) and password = (?)) as userSignIn`
+        let sqlQuery = `SELECT EXISTS (SELECT user.email from user where user.email = (?) and user.password = (?)) as userSignIn`
         let sqlValue = [email,passwordDigest]
         let result = await fetchResults(sqlQuery,sqlValue)
 
@@ -35,7 +34,7 @@ const signIn = async(req,res,next) =>{
 const createPost = async(req,res,next) =>{
     try{
         let email = req.userEmail
-        let sqlQuery = `SELECT userId from user where email = (?)`
+        let sqlQuery = `SELECT user.userId from user where user.email = (?)`
         let sqlValue = [email]
         let result = await fetchResults(sqlQuery,sqlValue)
 
@@ -59,7 +58,7 @@ const createPost = async(req,res,next) =>{
 const updatePost = async(req,res,next) =>{
     try{
         let email = req.userEmail
-        let sqlQuery = `SELECT userId from user where email = (?)`
+        let sqlQuery = `SELECT user.userId from user where user.email = (?)`
         let sqlValue = [email]
         let result = await fetchResults(sqlQuery,sqlValue)
 
@@ -67,14 +66,14 @@ const updatePost = async(req,res,next) =>{
         let postId = req.query.postId
         let columnName = Object.keys(req.query)[1]
         let columnValue = Object.values(req.query)[1]
-        sqlQuery = `UPDATE post set ${columnName} = (?) where postId = (?) and userId = (?)`
+        sqlQuery = `UPDATE post set post.${columnName} = (?) where post.postId = (?) and post.userId = (?)`
         sqlValue = [columnValue,postId,userId]
         result = await fetchResults(sqlQuery,sqlValue)
 
         if(result.affectedRows===0){
             let err = new Error()
-            err.message = "Wrong postId"
-            let errorInstance = createErrorResponse(404,"Not Found",err)
+            err.message = `Unauthorised to view the postId = ${postId}`
+            let errorInstance = createErrorResponse(403,"Unauthorised",err)
             return next(errorInstance)
         }
 
@@ -91,20 +90,20 @@ const updatePost = async(req,res,next) =>{
 const deletePost = async(req,res,next) =>{
     try{
         let email = req.userEmail
-        let sqlQuery = `SELECT userId from user where email = (?)`
+        let sqlQuery = `SELECT user.userId from user where user.email = (?)`
         let sqlValue = [email]
         let result = await fetchResults(sqlQuery,sqlValue)
 
         let userId = result[0].userId
         let { postId } = req.query
-        sqlQuery = `DELETE from post where postId = (?) and userId = (?)`
+        sqlQuery = `DELETE from post where post.postId = (?) and post.userId = (?)`
         sqlValue = [postId,userId]
         result = await fetchResults(sqlQuery,sqlValue)
 
         if(result.affectedRows===0){
             let err = new Error()
-            err.message = "Wrong postId"
-            let errorInstance = createErrorResponse(404,"Not Found",err)
+            err.message = `Unauthorised to view the postId = ${postId}`
+            let errorInstance = createErrorResponse(403,"Unauthorised",err)
             return next(errorInstance)
         }
 
@@ -121,7 +120,7 @@ const deletePost = async(req,res,next) =>{
 const answerPost = async(req,res,next) =>{
     try{
         let email = req.userEmail
-        let sqlQuery = `SELECT userId from user where email = (?)`
+        let sqlQuery = `SELECT user.userId from user where user.email = (?)`
         let sqlValue = [email]
         let result = await fetchResults(sqlQuery,sqlValue)
 
@@ -144,26 +143,30 @@ const answerPost = async(req,res,next) =>{
 const displayAnswer = async(req,res,next) =>{
     try{
         let title = req.query.title
-        let sqlQuery = `SELECT postId from post where title = ?`
+        let sqlQuery = `SELECT post.postId from post where post.title = ?`
         let sqlValue = [title]
         let result = await fetchResults(sqlQuery,sqlValue)
 
         let postId = result[0].postId
-        sqlQuery="SELECT "
-        let filters = Object.keys(req.query)
-        if(filters.length===1) sqlQuery += ("* from answer ")
-        else{
-            for(let i=1;i<filters.length;i++){
-                if(i!=filters.length-1) sqlQuery += (`${filters[i]}, `)
-                else sqlQuery += (`${filters[i]} `)
-            }
-            sqlQuery += ("from answer")
+        let answerColumnNames = []
+        for(let i=1;i<Object.keys(req.query).length;i++) answerColumnNames.push(`answer.${Object.keys(req.query)[i]}`)
+        let results
+        if(answerColumnNames.length === 0){
+            sqlQuery = "SELECT answer.answerId,answer.userId,answer.postId,answer.answer,answer.createdTime from answer where answer.postId = ? order by answer.createdTime desc"
+            results = await fetchResults(sqlQuery,[postId])
         }
-        sqlQuery += (` where postId = (?) order by createdTime desc`)
-        sqlValue = [postId]
-        result = await fetchResults(sqlQuery,sqlValue)
+        else{
+            sqlQuery = 'SELECT ?? from answer where answer.postId = ? order by answer.createdTime desc'
+            results = await fetchResults(sqlQuery,[answerColumnNames,postId])
+        }
+        if(results.length===0){
+            let err = new Error()
+            err.message = "No answer available"
+            let errorInstance = createErrorResponse(404,"Not found",err)
+            return next(errorInstance)
+        }
 
-        let response = createResponse(result,'Read all Data')
+        let response = createResponse(results,'Read all Data')
         res.status(200).send(response)
 
     }catch(err){
@@ -180,20 +183,22 @@ const displayPost = async(req,res,next) =>{
         let recordsPerPage = 2
         offsetValue = (page-1)*recordsPerPage
 
-        let sqlQuery = `SELECT postId,description,createdTime from post where `
-        for(let i=1;i<Object.keys(req.query).length;i++){
-            if(i!=Object.keys(req.query).length-1) sqlQuery += (`${ Object.keys(req.query)[i] } like ? and `)
-            else sqlQuery += (`${ Object.keys(req.query)[i] } like ? `)
-        }
-        sqlQuery +=("order by createdTime desc")
-        let sqlValue = []
-        for(let i=1;i<Object.values(req.query).length;i++){
-            let value = "%"
-            value += Object.values(req.query)[i]
-            value +="%"
-            sqlValue.push(value)
-        }
+        let sqlQuery = "SELECT post.postId,post.userId,post.title,post.description,post.tag,post.createdTime from post where (post.title like ? or ? IS NULL) and (post.tag like ? or ? IS NULL) order by post.createdTime desc limit ? offset ?"
+        let title = req.query.title
+        let tag = req.query.tag
+        if (title === undefined) title = null
+        else title = `%${title}%`
+        if(tag === undefined) tag = null
+        else tag = `%${tag}%`
+        let sqlValue = [title,title,tag,tag,recordsPerPage,offsetValue]
+        
         let results = await fetchResults(sqlQuery,sqlValue)
+        if(results.length===0){
+            let err = new Error()
+            err.message = "No data"
+            let errorInstance = createErrorResponse(404,"Not found",err)
+            return next(errorInstance)
+        }
 
         let response = createResponse(results,'Read all Data')
         res.status(200).send(response)
