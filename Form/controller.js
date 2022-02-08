@@ -64,10 +64,11 @@ const updatePost = async(req,res,next) =>{
 
         let userId = result[0].userId
         let postId = req.query.postId
-        let columnName = Object.keys(req.query)[1]
-        let columnValue = Object.values(req.query)[1]
-        sqlQuery = `UPDATE post set post.${columnName} = (?) where post.postId = (?) and post.userId = (?)`
-        sqlValue = [columnValue,postId,userId]
+        let postUpdateColumn = {...req.query} // contains columns of Post table and new values for update
+        delete postUpdateColumn["postId"]
+        
+        sqlQuery = `UPDATE post set ? where post.postId = (?) and post.userId = (?)`
+        sqlValue = [postUpdateColumn,postId,userId]
         result = await fetchResults(sqlQuery,sqlValue)
 
         if(result.affectedRows===0){
@@ -148,7 +149,7 @@ const displayAnswer = async(req,res,next) =>{
         let result = await fetchResults(sqlQuery,sqlValue)
 
         let postId = result[0].postId
-        let answerColumnNames = []
+        let answerColumnNames = [] // column names in answer table
         for(let i=1;i<Object.keys(req.query).length;i++) answerColumnNames.push(`answer.${Object.keys(req.query)[i]}`)
         let results
         if(answerColumnNames.length === 0){
@@ -159,12 +160,14 @@ const displayAnswer = async(req,res,next) =>{
             sqlQuery = 'SELECT ?? from answer where answer.postId = ? order by answer.createdTime desc'
             results = await fetchResults(sqlQuery,[answerColumnNames,postId])
         }
+
         if(results.length===0){
             let err = new Error()
             err.message = "No answer available"
             let errorInstance = createErrorResponse(404,"Not found",err)
             return next(errorInstance)
         }
+        
 
         let response = createResponse(results,'Read all Data')
         res.status(200).send(response)
